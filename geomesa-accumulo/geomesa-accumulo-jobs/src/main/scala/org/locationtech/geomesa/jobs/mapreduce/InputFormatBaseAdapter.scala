@@ -1,5 +1,6 @@
 /***********************************************************************
 * Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
+* Portions Crown Copyright (c) 2017 Dstl
 * All rights reserved. This program and the accompanying materials
 * are made available under the terms of the Apache License, Version 2.0
 * which accompanies this distribution and is available at
@@ -9,28 +10,41 @@
 package org.locationtech.geomesa.jobs.mapreduce
 
 import org.apache.accumulo.core.client.mapreduce.AccumuloInputFormat
-import org.apache.accumulo.core.client.security.tokens.{AuthenticationToken, PasswordToken}
+import org.apache.accumulo.core.client.security.tokens.{AuthenticationToken, KerberosToken}
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.hadoop.mapreduce.Job
 import org.locationtech.geomesa.accumulo.AccumuloVersion._
 
 object InputFormatBaseAdapter {
 
-  def setConnectorInfo(job: Job, user: String, token: PasswordToken) = accumuloVersion match {
+  def setConnectorInfo(job: Job, user: String, token: AuthenticationToken) = accumuloVersion match {
     case V15 => setConnectorInfo15(job, user, token)
     case V16 => setConnectorInfo16(job, user, token)
-    case _   => setConnectorInfo16(job, user, token)
+    case V17 => setConnectorInfo17(job, user, token)
+    case _   => setConnectorInfo17(job, user, token)
   }
 
-  def setConnectorInfo15(job: Job, user: String, token: PasswordToken) = {
+  def setConnectorInfo15(job: Job, user: String, token: AuthenticationToken) = {
+    if (token.isInstanceOf[KerberosToken]) {
+      throw new IllegalArgumentException("Kerberos not supported by Accumulo 1.5")
+    }
     val method = Class.forName("org.apache.accumulo.core.client.mapreduce.InputFormatBase")
         .getMethod("setConnectorInfo", classOf[Job], classOf[String], classOf[AuthenticationToken])
     method.invoke(null, job, user, token)
   }
 
-  def setConnectorInfo16(job: Job, user: String, token: PasswordToken) = {
+  def setConnectorInfo16(job: Job, user: String, token: AuthenticationToken) = {
+    if (token.isInstanceOf[KerberosToken]) {
+      throw new IllegalArgumentException("Kerberos not supported by Accumulo 1.6")
+    }
     val method = classOf[AccumuloInputFormat]
         .getMethod("setConnectorInfo", classOf[Job], classOf[String], classOf[AuthenticationToken])
+    method.invoke(null, job, user, token)
+  }
+
+  def setConnectorInfo17(job: Job, user: String, token: AuthenticationToken) = {
+    val method = classOf[AccumuloInputFormat]
+      .getMethod("setConnectorInfo", classOf[Job], classOf[String], classOf[AuthenticationToken])
     method.invoke(null, job, user, token)
   }
 

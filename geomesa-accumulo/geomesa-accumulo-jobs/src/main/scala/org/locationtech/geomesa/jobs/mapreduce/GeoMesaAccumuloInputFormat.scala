@@ -1,5 +1,6 @@
 /***********************************************************************
 * Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
+* Portions Crown Copyright (c) 2017 Dstl
 * All rights reserved. This program and the accompanying materials
 * are made available under the terms of the Apache License, Version 2.0
 * which accompanies this distribution and is available at
@@ -13,7 +14,7 @@ import java.net.{URL, URLClassLoader}
 
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.accumulo.core.client.mapreduce.{AbstractInputFormat, AccumuloInputFormat, InputFormatBase, RangeInputSplit}
-import org.apache.accumulo.core.client.security.tokens.PasswordToken
+import org.apache.accumulo.core.client.security.tokens.{AuthenticationToken, KerberosToken, PasswordToken}
 import org.apache.accumulo.core.data.{Key, Value}
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.accumulo.core.util.{Pair => AccPair}
@@ -68,11 +69,29 @@ object GeoMesaAccumuloInputFormat extends LazyLogging {
     // set up the underlying accumulo input format
     val user = AccumuloDataStoreParams.userParam.lookUp(dsParams).asInstanceOf[String]
     val password = AccumuloDataStoreParams.passwordParam.lookUp(dsParams).asInstanceOf[String]
-    InputFormatBaseAdapter.setConnectorInfo(job, user, new PasswordToken(password.getBytes))
+    val keytabPath = AccumuloDataStoreParams.keytabPathParam.lookUp(dsParams).asInstanceOf[String]
+    val useMock = java.lang.Boolean.valueOf(AccumuloDataStoreParams.mockParam.lookUp(dsParams).asInstanceOf[String])
+
+    // Create authentication token depending on how we are authenticating
+    val authToken : AuthenticationToken = if (password != null && keytabPath == null) {
+      new PasswordToken(password.getBytes("UTF-8"))
+    } else if (password == null && keytabPath != null) {
+      if (!useMock) {
+        // TODO: should really provide a DelegationToken here
+        new KerberosToken(user, new java.io.File(keytabPath), true)
+      } else {
+        // Mock doesn't support Kerberos, so give it a pretend PasswordTOken
+        new PasswordToken("".getBytes("UTF-8"))
+      }
+    } else {
+      throw new IllegalArgumentException("Neither or both of password & keytabPath are set")
+    }
+
+    InputFormatBaseAdapter.setConnectorInfo(job, user, authToken)
 
     val instance = AccumuloDataStoreParams.instanceIdParam.lookUp(dsParams).asInstanceOf[String]
     val zookeepers = AccumuloDataStoreParams.zookeepersParam.lookUp(dsParams).asInstanceOf[String]
-    if (java.lang.Boolean.valueOf(AccumuloDataStoreParams.mockParam.lookUp(dsParams).asInstanceOf[String])) {
+    if (useMock) {
       AbstractInputFormat.setMockInstance(job, instance)
     } else {
       InputFormatBaseAdapter.setZooKeeperInstance(job, instance, zookeepers)
