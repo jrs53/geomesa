@@ -8,7 +8,8 @@
 
 package org.locationtech.geomesa.spark.accumulo
 
-import org.apache.accumulo.core.client.mapreduce.AccumuloInputFormat
+import org.apache.accumulo.core.client.ClientConfiguration
+import org.apache.accumulo.core.client.mapreduce.{AbstractInputFormat, AccumuloInputFormat}
 import org.apache.accumulo.core.client.mapreduce.lib.impl.InputConfigurator
 import org.apache.accumulo.core.client.mapreduce.lib.util.ConfiguratorBase
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
@@ -17,6 +18,7 @@ import org.apache.accumulo.core.util.{Pair => AccPair}
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.geotools.data.{DataStoreFinder, Query, Transaction}
@@ -59,12 +61,26 @@ class AccumuloSpatialRDDProvider extends SpatialRDDProvider {
         val instance = ds.connector.getInstance().getInstanceName
         val zookeepers = ds.connector.getInstance().getZooKeepers
 
-        ConfiguratorBase.setConnectorInfo(classOf[AccumuloInputFormat], conf, username, password)
+        // Create Job for use with new AccumuloInputFormat configuration API.
+        // Note this will create a copy of conf (not update it in=place),
+        // so we will need to update it at the end.
+        // Also note as a Scala=ism, we call AbstractInputFormat.setFoo rather than
+        // AccumuloInputFormat.setFoo
+        val job = Job.getInstance(conf)
+
+        /*AccumuloInputFormat*/AbstractInputFormat.setConnectorInfo(job, username, password)
         if (Try(params("useMock").toBoolean).getOrElse(false)){
-          ConfiguratorBase.setMockInstance(classOf[AccumuloInputFormat], conf, instance)
+          /*AccumuloInputFormat*/AbstractInputFormat.setMockInstance(job, instance)
         } else {
-          ConfiguratorBase.setZooKeeperInstance(classOf[AccumuloInputFormat], conf, instance, zookeepers)
+          val cc = new ClientConfiguration()
+            .withInstance(instance)
+            .withZkHosts(zookeepers)
+          /*AccumuloInputFormat*/AbstractInputFormat.setZooKeeperInstance(job, cc)
         }
+
+        // Copy new conf from job back into conf
+        job.getConfiguration.foreach(c => conf.set(c.getKey, c.getValue))
+
         InputConfigurator.setInputTableName(classOf[AccumuloInputFormat], conf, qp.table)
         InputConfigurator.setRanges(classOf[AccumuloInputFormat], conf, qp.ranges)
         qp.iterators.foreach(InputConfigurator.addIterator(classOf[AccumuloInputFormat], conf, _))
