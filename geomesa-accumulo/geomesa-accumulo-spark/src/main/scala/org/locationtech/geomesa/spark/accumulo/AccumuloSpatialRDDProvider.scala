@@ -12,7 +12,7 @@ import org.apache.accumulo.core.client.ClientConfiguration
 import org.apache.accumulo.core.client.mapreduce.{AbstractInputFormat, AccumuloInputFormat}
 import org.apache.accumulo.core.client.mapreduce.lib.impl.InputConfigurator
 import org.apache.accumulo.core.client.mapreduce.lib.util.ConfiguratorBase
-import org.apache.accumulo.core.client.security.tokens.PasswordToken
+import org.apache.accumulo.core.client.security.tokens.{KerberosToken, PasswordToken}
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.accumulo.core.util.{Pair => AccPair}
 import org.apache.commons.io.IOUtils
@@ -50,7 +50,18 @@ class AccumuloSpatialRDDProvider extends SpatialRDDProvider {
                    query: Query): SpatialRDD = {
     val ds = DataStoreFinder.getDataStore(params).asInstanceOf[AccumuloDataStore]
     val username = AccumuloDataStoreParams.userParam.lookUp(params).toString
-    val password = new PasswordToken(AccumuloDataStoreParams.passwordParam.lookUp(params).toString.getBytes)
+
+    // Precisely one of these should be set due to prior validation
+    val password = AccumuloDataStoreParams.passwordParam.lookUp(params)
+    val keytabPath = AccumuloDataStoreParams.keytabPathParam.lookUp(params)
+
+    // Create authentication token according to password or Kerberos
+    val authToken = if(password != null) {
+      new PasswordToken(password.toString.getBytes)
+    } else {
+      // Accumulo takes care of creating DelegationToken for us
+      new KerberosToken(username, new java.io.File(keytabPath.toString), true)
+    }
 
     lazy val transform = query.getHints.getTransformSchema
 
@@ -68,15 +79,20 @@ class AccumuloSpatialRDDProvider extends SpatialRDDProvider {
         // AccumuloInputFormat.setFoo
         val job = Job.getInstance(conf)
 
-        /*AccumuloInputFormat*/AbstractInputFormat.setConnectorInfo(job, username, password)
         if (Try(params("useMock").toBoolean).getOrElse(false)){
           /*AccumuloInputFormat*/AbstractInputFormat.setMockInstance(job, instance)
         } else {
           val cc = new ClientConfiguration()
             .withInstance(instance)
             .withZkHosts(zookeepers)
+            .withSasl(authToken.isInstanceOf[KerberosToken])
+
           /*AccumuloInputFormat*/AbstractInputFormat.setZooKeeperInstance(job, cc)
         }
+
+        // Must occur after setXXXInstance since with Kerberos attempts to look up instance
+        // to get DelegationToken
+        /*AccumuloInputFormat*/AbstractInputFormat.setConnectorInfo(job, username, authToken)
 
         // Copy new conf from job back into conf
         job.getConfiguration.foreach(c => conf.set(c.getKey, c.getValue))
