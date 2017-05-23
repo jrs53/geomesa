@@ -31,6 +31,7 @@ object GeoMesaArgs {
   final val OutputZookeepers = "--geomesa.output.zookeepers"
   final val OutputTableName = "--geomesa.output.tableName"
   final val OutputFeature = "--geomesa.output.feature"
+  final val OutputHdfs = "--geomesa.output.hdfs"
 }
 
 trait ReverseParsable {
@@ -179,6 +180,20 @@ trait InputCqlArgs extends ReverseParsable {
   override def unparse(): Array[String] = {
     if (inCql != null) {
       Array(GeoMesaArgs.InputCQL, inCql)
+    } else {
+      Array.empty
+    }
+  }
+}
+
+trait OutputHdfsArgs extends ReverseParsable {
+
+  @Parameter(names = Array(GeoMesaArgs.OutputHdfs), description = "HDFS path", required = true)
+  var outHdfs: String = null
+
+  override def unparse(): Array[String] = {
+    if (outHdfs != null) {
+      Array(GeoMesaArgs.OutputHdfs, outHdfs)
     } else {
       Array.empty
     }
