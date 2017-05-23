@@ -69,33 +69,9 @@ class AccumuloSpatialRDDProvider extends SpatialRDDProvider {
       if (ds == null || sft == null || qp.isInstanceOf[EmptyPlan]) {
         sc.emptyRDD[SimpleFeature]
       } else {
-        val instance = ds.connector.getInstance().getInstanceName
-        val zookeepers = ds.connector.getInstance().getZooKeepers
 
-        // Create Job for use with new AccumuloInputFormat configuration API.
-        // Note this will create a copy of conf (not update it in=place),
-        // so we will need to update it at the end.
-        // Also note as a Scala=ism, we call AbstractInputFormat.setFoo rather than
-        // AccumuloInputFormat.setFoo
-        val job = Job.getInstance(conf)
-
-        if (Try(params("useMock").toBoolean).getOrElse(false)){
-          /*AccumuloInputFormat*/AbstractInputFormat.setMockInstance(job, instance)
-        } else {
-          val cc = new ClientConfiguration()
-            .withInstance(instance)
-            .withZkHosts(zookeepers)
-            .withSasl(authToken.isInstanceOf[KerberosToken])
-
-          /*AccumuloInputFormat*/AbstractInputFormat.setZooKeeperInstance(job, cc)
-        }
-
-        // Must occur after setXXXInstance since with Kerberos attempts to look up instance
-        // to get DelegationToken
-        /*AccumuloInputFormat*/AbstractInputFormat.setConnectorInfo(job, username, authToken)
-
-        // Copy new conf from job back into conf
-        job.getConfiguration.foreach(c => conf.set(c.getKey, c.getValue))
+        // Accumulo configuration takes place in GeoMesaAccumuloInputFormat.init
+        // This is so that a Kerberos token can be included in the Job
 
         InputConfigurator.setInputTableName(classOf[AccumuloInputFormat], conf, qp.table)
         InputConfigurator.setRanges(classOf[AccumuloInputFormat], conf, qp.ranges)
