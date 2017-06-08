@@ -20,6 +20,7 @@ abstract class GeoMesaArgs(val args: Array[String]) extends ReverseParsable {
 object GeoMesaArgs {
   final val InputUser = "--geomesa.input.user"
   final val InputPassword = "--geomesa.input.password"
+  final val InputKeytabPath = "--geomesa.input.keytabPath"
   final val InputInstanceId = "--geomesa.input.instanceId"
   final val InputZookeepers = "--geomesa.input.zookeepers"
   final val InputTableName = "--geomesa.input.tableName"
@@ -43,8 +44,11 @@ trait InputDataStoreArgs extends ReverseParsable {
   @Parameter(names = Array(GeoMesaArgs.InputUser), description = "Accumulo user name", required = true)
   var inUser: String = null
 
-  @Parameter(names = Array(GeoMesaArgs.InputPassword), description = "Accumulo password", required = true)
+  @Parameter(names = Array(GeoMesaArgs.InputPassword), description = "Accumulo password")
   var inPassword: String = null
+
+  @Parameter(names = Array(GeoMesaArgs.InputKeytabPath), description = "Accumulo Kerberos keytab path")
+  var inKeytabPath: String = null
 
   @Parameter(names = Array(GeoMesaArgs.InputInstanceId), description = "Accumulo instance name", required = true)
   var inInstanceId: String = null
@@ -58,6 +62,7 @@ trait InputDataStoreArgs extends ReverseParsable {
   def inDataStore: Map[String, String] = Map(
     AccumuloDataStoreParams.userParam.getName       -> inUser,
     AccumuloDataStoreParams.passwordParam.getName   -> inPassword,
+    AccumuloDataStoreParams.keytabPathParam.getName -> inKeytabPath,
     AccumuloDataStoreParams.instanceIdParam.getName -> inInstanceId,
     AccumuloDataStoreParams.zookeepersParam.getName -> inZookeepers,
     AccumuloDataStoreParams.tableNameParam.getName  -> inTableName
@@ -70,6 +75,9 @@ trait InputDataStoreArgs extends ReverseParsable {
     }
     if (inPassword != null) {
       buf.append(GeoMesaArgs.InputPassword, inPassword)
+    }
+    if (inKeytabPath != null) {
+      buf.append(GeoMesaArgs.InputKeytabPath, inKeytabPath)
     }
     if (inInstanceId != null) {
       buf.append(GeoMesaArgs.InputInstanceId, inInstanceId)

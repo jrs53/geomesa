@@ -49,7 +49,7 @@ object GeoMesaConfigurator {
 
   // set/get the connection parameters for an input format
   def setDataStoreInParams(conf: Configuration, params: Map[String, String]): Unit =
-    params.foreach { case (key, value) => conf.set(s"$dsInParams$key", value) }
+    params.foreach { case (key, value) => if (value != null) conf.set(s"$dsInParams$key", value) }
   def getDataStoreInParams(job: Job): Map[String, String] =
     getDataStoreInParams(job.getConfiguration)
   def getDataStoreInParams(conf: Configuration): Map[String, String] =
