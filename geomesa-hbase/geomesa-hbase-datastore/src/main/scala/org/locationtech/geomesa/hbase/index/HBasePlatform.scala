@@ -1,20 +1,21 @@
 /***********************************************************************
-* Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.hbase.index
 
 import com.google.common.collect.Lists
+import org.apache.hadoop.hbase.TableName
 import org.apache.hadoop.hbase.client.{Get, Query, Result, Scan}
 import org.apache.hadoop.hbase.filter.MultiRowRangeFilter.RowRange
 import org.apache.hadoop.hbase.filter.{FilterList, MultiRowRangeFilter, Filter => HFilter}
-import org.apache.hadoop.hbase.{Coprocessor, TableName}
 import org.geotools.factory.Hints
 import org.locationtech.geomesa.hbase.HBaseFilterStrategyType
+import org.locationtech.geomesa.hbase.coprocessor.utils.CoprocessorConfig
 import org.locationtech.geomesa.hbase.data.{CoprocessorPlan, HBaseDataStore, HBaseQueryPlan, ScanPlan}
 import org.locationtech.geomesa.index.index.IndexAdapter
 import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
@@ -27,8 +28,8 @@ trait HBasePlatform extends HBaseFeatureIndex {
                                                hints: Hints,
                                                ranges: Seq[Query],
                                                table: TableName,
-                                               hbaseFilters: Seq[HFilter],
-                                               coprocessor: Option[Coprocessor],
+                                               hbaseFilters: Seq[(Int, HFilter)],
+                                               coprocessor: Option[CoprocessorConfig],
                                                toFeatures: (Iterator[Result]) => Iterator[SimpleFeature]): HBaseQueryPlan = {
     coprocessor match {
       case None =>
@@ -39,14 +40,14 @@ trait HBasePlatform extends HBaseFeatureIndex {
         }
         ScanPlan(filter, table, scans, toFeatures)
 
-      case Some(processor) =>
+      case Some(coprocessorConfig) =>
         // note: coprocessors don't currently handle multiRowRangeFilters, so pass the raw ranges
-        CoprocessorPlan(sft, filter, hints, table, ranges.asInstanceOf[Seq[Scan]], hbaseFilters, toFeatures)
+        CoprocessorPlan(filter, table, ranges.asInstanceOf[Seq[Scan]], hbaseFilters, coprocessorConfig)
     }
   }
 
-  private def configureGet(originalRanges: Seq[Query], hbaseFilters: Seq[HFilter]): Seq[Scan] = {
-    val filterList = new FilterList(hbaseFilters: _*)
+  private def configureGet(originalRanges: Seq[Query], hbaseFilters: Seq[(Int, HFilter)]): Seq[Scan] = {
+    val filterList = new FilterList(hbaseFilters.sortBy(_._1).map(_._2): _*)
     // convert Gets to Scans for Spark SQL compatibility
     originalRanges.map { r =>
       val g = r.asInstanceOf[Get]
@@ -56,8 +57,13 @@ trait HBasePlatform extends HBaseFeatureIndex {
     }
   }
 
-  private def configureMultiRowRangeFilter(ds: HBaseDataStore, originalRanges: Seq[Query], hbaseFilters: Seq[HFilter]) = {
+  private def configureMultiRowRangeFilter(ds: HBaseDataStore,
+                                           originalRanges: Seq[Query],
+                                           hbaseFilters: Seq[(Int, HFilter)]) = {
     import scala.collection.JavaConversions._
+
+    val sortedFilters = hbaseFilters.sortBy(_._1).map(_._2)
+
     val rowRanges = Lists.newArrayList[RowRange]()
     originalRanges.foreach { r =>
       rowRanges.add(new RowRange(r.asInstanceOf[Scan].getStartRow, true, r.asInstanceOf[Scan].getStopRow, false))
@@ -76,8 +82,8 @@ trait HBasePlatform extends HBaseFeatureIndex {
       // currently, this constructor will call sortAndMerge a second time
       // this is unnecessary as we have already sorted and merged above
       val mrrf = new MultiRowRangeFilter(localRanges)
-      val filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL, mrrf)
-      hbaseFilters.foreach { f => filterList.addFilter(f) }
+      // note: mrrf first priority
+      val filterList = new FilterList(sortedFilters.+:(mrrf): _*)
 
       val s = new Scan()
       s.setStartRow(localRanges.head.getStartRow)

@@ -11,6 +11,7 @@
             <useTransitiveDependencies>false</useTransitiveDependencies>
             <includes>
                 <include>org.locationtech.geomesa:geomesa-cassandra-gs-plugin*</include>
+                <include>org.locationtech.geomesa:geomesa-process-wps*</include>
             </includes>
         </dependencySet>
         <dependencySet>
@@ -34,6 +35,7 @@
             <useStrictFiltering>true</useStrictFiltering>
             <excludes>
                 <exclude>org.locationtech.geomesa:geomesa-cassandra-gs-plugin*</exclude>
+                <exclude>org.locationtech.geomesa:geomesa-process-wps*</exclude>
             </excludes>
         </dependencySet>
     </dependencySets>
@@ -87,6 +89,13 @@
             <excludes>
                 <exclude>log4j.properties</exclude>
             </excludes>
+        </fileSet>
+        <fileSet>
+            <directory>../../geomesa-tools/examples</directory>
+            <outputDirectory>examples</outputDirectory>
+            <fileMode>0644</fileMode>
+            <filtered>false</filtered>
+            <directoryMode>755</directoryMode>
         </fileSet>
         <fileSet>
             <directory>./</directory>

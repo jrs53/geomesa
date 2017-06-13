@@ -1,21 +1,19 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.convert.xml
 
 import java.io.StringWriter
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
-import javax.xml.transform.{OutputKeys, TransformerFactory, Transformer}
+import javax.xml.transform.{OutputKeys, Transformer, TransformerFactory}
 
-import org.apache.avro.generic.GenericRecord
-import org.locationtech.geomesa.convert.Transformers.EvaluationContext
-import org.locationtech.geomesa.convert.{TransformerFn, TransformerFunctionFactory}
+import org.locationtech.geomesa.convert.{EvaluationContext, TransformerFn, TransformerFunctionFactory}
 import org.locationtech.geomesa.utils.cache.SoftThreadLocal
 import org.w3c.dom.Element
 

@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.utils.text
 
@@ -27,22 +27,16 @@ object Suffixes {
       .appendMillis().appendSuffix("ms")
       .toFormatter
 
-    def duration(s: String): Option[Duration] = {
+    def duration(s: String): Try[Duration] = {
       Try[Duration](Period.parse(s.toLowerCase, format).toStandardDuration)
         .orElse(Try(Duration.millis(s.toLong)))
-      match {
-        case Success(d) => Some(d)
-        case Failure(e) =>
-          logger.error(s"Unable to parse duration $s", e)
-          None
-      }
     }
 
-    def millis(s: String): Option[Long]  = duration(s).map(_.getMillis)
-    def seconds(s: String): Option[Long] = duration(s).map(_.getStandardSeconds)
-    def minutes(s: String): Option[Long] = duration(s).map(_.getStandardMinutes)
-    def hours(s: String): Option[Long]   = duration(s).map(_.getStandardHours)
-    def days(s: String): Option[Long]    = duration(s).map(_.getStandardDays)
+    def millis(s: String): Try[Long]  = duration(s).map(_.getMillis)
+    def seconds(s: String): Try[Long] = duration(s).map(_.getStandardSeconds)
+    def minutes(s: String): Try[Long] = duration(s).map(_.getStandardMinutes)
+    def hours(s: String): Try[Long]   = duration(s).map(_.getStandardHours)
+    def days(s: String): Try[Long]    = duration(s).map(_.getStandardDays)
   }
 
   object Memory extends LazyLogging {

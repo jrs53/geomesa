@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.index.api
 
@@ -14,6 +14,7 @@ import java.util.Locale
 import org.apache.commons.codec.binary.Hex
 import org.geotools.factory.Hints
 import org.locationtech.geomesa.index.geotools.GeoMesaDataStore
+import org.locationtech.geomesa.index.stats.GeoMesaStats
 import org.locationtech.geomesa.index.utils.{ExplainNull, Explainer}
 import org.opengis.feature.simple.SimpleFeatureType
 import org.opengis.filter.Filter
@@ -90,6 +91,14 @@ trait GeoMesaFeatureIndex[DS <: GeoMesaDataStore[DS, F, WriteResult], F <: Wrapp
   def delete(sft: SimpleFeatureType, ds: DS, shared: Boolean): Unit
 
   /**
+    * Indicates whether the ID for each feature is serialized with the feature or in the row
+    *
+    * @return
+    */
+  @deprecated
+  def serializedWithId: Boolean = false
+
+  /**
     *
     * Retrieve an ID from a row. All indices are assumed to encode the feature ID into the row key
     *
@@ -129,7 +138,7 @@ trait GeoMesaFeatureIndex[DS <: GeoMesaDataStore[DS, F, WriteResult], F <: Wrapp
     * number of features that will have to be scanned.
     */
   def getCost(sft: SimpleFeatureType,
-              ds: Option[DS],
+              stats: Option[GeoMesaStats],
               filter: TypedFilterStrategy,
               transform: Option[SimpleFeatureType]): Long
 

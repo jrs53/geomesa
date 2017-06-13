@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.filter
 
@@ -28,7 +28,7 @@ class FilterHelperTest extends Specification {
   val MinDateTime = Converters.convert(FilterHelper.MinDateTime.toDate, classOf[String])
   val MaxDateTime = Converters.convert(FilterHelper.MaxDateTime.toDate, classOf[String])
 
-  def updateFilter(filter: Filter) = filter.accept(new QueryPlanFilterVisitor(null), null).asInstanceOf[Filter]
+  def updateFilter(filter: Filter): Filter = filter.accept(new QueryPlanFilterVisitor(null), null).asInstanceOf[Filter]
 
   def toInterval(dt1: String, dt2: String): (DateTime, DateTime) = {
     val s = Converters.convert(dt1, classOf[Date])
@@ -87,6 +87,12 @@ class FilterHelperTest extends Specification {
         val intervals = FilterHelper.extractIntervals(filter, "dtg")
         intervals mustEqual FilterValues(Seq(toInterval("2016-01-01T00:00:00.000Z", "2016-01-02T00:00:00.000Z")))
       }
+    }
+
+    "extract interval from narrow during" >> {
+      val filter = ECQL.toFilter("dtg DURING 2016-01-01T00:00:00.000Z/T1S")
+      val intervals = FilterHelper.extractIntervals(filter, "dtg", handleExclusiveBounds = true)
+      intervals mustEqual FilterValues(Seq(toInterval("2016-01-01T00:00:00.000Z", "2016-01-01T00:00:01.000Z")))
     }
 
     "extract interval with exclusive endpoints from simple during and between" >> {

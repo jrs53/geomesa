@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.hbase.data
 
@@ -33,11 +33,15 @@ class HBaseDataStoreTest extends HBaseTest with LazyLogging {
 
   sequential
 
+  step {
+    logger.info("Starting the HBase DataStore Test")
+  }
+
   "HBaseDataStore" should {
     "work with points" in {
       val typeName = "testpoints"
 
-      val params = Map(ConnectionParam.getName -> connection, BigTableNameParam.getName -> "HBaseDataStoreTest")
+      val params = Map(ConnectionParam.getName -> connection, BigTableNameParam.getName -> catalogTableName)
       val ds = DataStoreFinder.getDataStore(params).asInstanceOf[HBaseDataStore]
 
       ds.getSchema(typeName) must beNull
@@ -137,7 +141,6 @@ class HBaseDataStoreTest extends HBaseTest with LazyLogging {
         testQuery(ds, typeName, "name < 'name5'", null, toAdd.take(5))
         testQuery(ds, typeName, "name = 'name5'", null, Seq(toAdd(5)))
       }
-
     }
   }
 

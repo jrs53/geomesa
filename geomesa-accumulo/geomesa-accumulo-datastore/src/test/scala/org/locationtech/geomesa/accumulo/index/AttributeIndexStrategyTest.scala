@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.accumulo.index
 
@@ -19,13 +19,14 @@ import org.joda.time.format.ISODateTimeFormat
 import org.junit.runner.RunWith
 import org.locationtech.geomesa.accumulo.TestWithDataStore
 import org.locationtech.geomesa.accumulo.index.legacy.attribute.AttributeWritableIndex
-import org.locationtech.geomesa.accumulo.iterators.{BinAggregatingIterator, KryoLazyDensityIterator}
 import org.locationtech.geomesa.features.ScalaSimpleFeature
 import org.locationtech.geomesa.filter._
 import org.locationtech.geomesa.filter.function.Convert2ViewerFunction
-import org.locationtech.geomesa.index.api.{FilterSplitter, FilterStrategy}
+import org.locationtech.geomesa.index.api.FilterStrategy
 import org.locationtech.geomesa.index.conf.QueryHints._
-import org.locationtech.geomesa.index.utils.{ExplainNull, Explainer, KryoLazyDensityUtils}
+import org.locationtech.geomesa.index.iterators.DensityScan
+import org.locationtech.geomesa.index.planning.FilterSplitter
+import org.locationtech.geomesa.index.utils.{ExplainNull, Explainer}
 import org.locationtech.geomesa.utils.collection.SelfClosingIterator
 import org.locationtech.geomesa.utils.geotools.CRS_EPSG_4326
 import org.locationtech.geomesa.utils.text.WKTUtils
@@ -118,7 +119,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
     }
 
     "support bin queries with join queries" in {
-      import BinAggregatingIterator.BIN_ATTRIBUTE_INDEX
+      import org.locationtech.geomesa.filter.function.BinaryOutputEncoder.BIN_ATTRIBUTE_INDEX
       val query = new Query(sftName, ECQL.toFilter("count>=2"))
       query.getHints.put(BIN_TRACK, "name")
       query.getHints.put(BIN_BATCH_SIZE, 1000)
@@ -131,7 +132,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
     }
 
     "support bin queries against index values" in {
-      import BinAggregatingIterator.BIN_ATTRIBUTE_INDEX
+      import org.locationtech.geomesa.filter.function.BinaryOutputEncoder.BIN_ATTRIBUTE_INDEX
       val query = new Query(sftName, ECQL.toFilter("count>=2"))
       query.getHints.put(BIN_TRACK, "dtg")
       query.getHints.put(BIN_BATCH_SIZE, 1000)
@@ -144,7 +145,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
     }
 
     "support bin queries against full values" in {
-      import BinAggregatingIterator.BIN_ATTRIBUTE_INDEX
+      import org.locationtech.geomesa.filter.function.BinaryOutputEncoder.BIN_ATTRIBUTE_INDEX
       val query = new Query(sftName, ECQL.toFilter("name>'amy'"))
       query.getHints.put(BIN_TRACK, "count")
       query.getHints.put(BIN_BATCH_SIZE, 1000)
@@ -157,7 +158,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
     }
 
     "support bin queries against non-default geoms with index-value track" in {
-      import BinAggregatingIterator.BIN_ATTRIBUTE_INDEX
+      import org.locationtech.geomesa.filter.function.BinaryOutputEncoder.BIN_ATTRIBUTE_INDEX
       val query = new Query(sftName, ECQL.toFilter("count>=2"))
       query.getHints.put(BIN_GEOM, "geom2")
       query.getHints.put(BIN_TRACK, "count")
@@ -308,7 +309,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
     }
 
     "support sampling with bin queries" in {
-      import BinAggregatingIterator.BIN_ATTRIBUTE_INDEX
+      import org.locationtech.geomesa.filter.function.BinaryOutputEncoder.BIN_ATTRIBUTE_INDEX
       // important - id filters will create multiple ranges and cause multiple iterators to be created
       val query = new Query(sftName, ECQL.toFilter("name > 'a'"))
       query.getHints.put(BIN_TRACK, "name")
@@ -328,7 +329,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
       query.getHints.put(DENSITY_HEIGHT, 600)
       query.getHints.put(DENSITY_WIDTH, 400)
       forall(ds.getQueryPlan(query))(_ must beAnInstanceOf[BatchScanPlan])
-      val decode = KryoLazyDensityUtils.decodeResult(envelope, 600, 400)
+      val decode = DensityScan.decodeResult(envelope, 600, 400)
       val results = runQuery(query).flatMap(decode).toList
       results must containTheSameElementsAs(Seq((41.325,58.5375,1.0), (42.025,58.5375,1.0), (40.675,58.5375,1.0)))
     }
@@ -341,7 +342,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
       query.getHints.put(DENSITY_WIDTH, 400)
       query.getHints.put(DENSITY_WEIGHT, "count")
       forall(ds.getQueryPlan(query))(_ must beAnInstanceOf[BatchScanPlan])
-      val decode = KryoLazyDensityUtils.decodeResult(envelope, 600, 400)
+      val decode = DensityScan.decodeResult(envelope, 600, 400)
       val results = runQuery(query).flatMap(decode).toList
       results must containTheSameElementsAs(Seq((41.325,58.5375,3.0), (42.025,58.5375,4.0), (40.675,58.5375,2.0)))
     }
@@ -354,7 +355,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
       query.getHints.put(DENSITY_WIDTH, 400)
       query.getHints.put(DENSITY_WEIGHT, "age")
       forall(ds.getQueryPlan(query))(_ must beAnInstanceOf[JoinPlan])
-      val decode = KryoLazyDensityUtils.decodeResult(envelope, 600, 400)
+      val decode = DensityScan.decodeResult(envelope, 600, 400)
       val results = runQuery(query).flatMap(decode).toList
       results must containTheSameElementsAs(Seq((40.675,58.5375,21.0), (41.325,58.5375,30.0), (42.025,58.5375,0.0)))
     }
@@ -366,7 +367,7 @@ class AttributeIndexStrategyTest extends Specification with TestWithDataStore {
       query.getHints.put(DENSITY_HEIGHT, 600)
       query.getHints.put(DENSITY_WIDTH, 400)
       forall(ds.getQueryPlan(query))(_ must beAnInstanceOf[BatchScanPlan])
-      val decode = KryoLazyDensityUtils.decodeResult(envelope, 600, 400)
+      val decode = DensityScan.decodeResult(envelope, 600, 400)
       val results = runQuery(query).flatMap(decode).toList
       results must containTheSameElementsAs(Seq((40.675,58.5375,1.0), (42.025,58.5375,1.0)))
     }

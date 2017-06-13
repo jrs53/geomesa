@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.index.conf
 
@@ -12,10 +12,10 @@ import com.vividsolutions.jts.geom.Envelope
 import org.geotools.factory.Hints
 import org.geotools.factory.Hints.{ClassKey, IntegerKey}
 import org.geotools.geometry.jts.ReferencedEnvelope
-import org.locationtech.geomesa.index.api.QueryPlanner.CostEvaluation
-import org.locationtech.geomesa.index.api.QueryPlanner.CostEvaluation.CostEvaluation
 import org.locationtech.geomesa.index.api.{GeoMesaFeatureIndex, WrappedFeature}
 import org.locationtech.geomesa.index.geotools.GeoMesaDataStore
+import org.locationtech.geomesa.index.planning.QueryPlanner.CostEvaluation
+import org.locationtech.geomesa.index.planning.QueryPlanner.CostEvaluation.CostEvaluation
 import org.locationtech.geomesa.utils.text.StringSerialization
 import org.opengis.feature.simple.SimpleFeatureType
 
@@ -52,6 +52,8 @@ object QueryHints {
   val ARROW_DICTIONARY_VALUES  = new ClassKey(classOf[java.lang.String])
   val ARROW_DICTIONARY_COMPUTE = new ClassKey(classOf[java.lang.Boolean])
   val ARROW_BATCH_SIZE         = new ClassKey(classOf[java.lang.Integer])
+  val ARROW_SORT_FIELD         = new ClassKey(classOf[java.lang.String])
+  val ARROW_SORT_REVERSE       = new ClassKey(classOf[java.lang.Boolean])
 
   // internal hints that shouldn't be set directly by users
   object Internal {
@@ -96,8 +98,12 @@ object QueryHints {
     def getArrowDictionaryEncodedValues: Map[String, Seq[AnyRef]] =
       Option(hints.get(ARROW_DICTIONARY_VALUES).asInstanceOf[String]).map(StringSerialization.decodeSeqMap).getOrElse(Map.empty)
     def getArrowBatchSize: Option[Int] = Option(hints.get(ARROW_BATCH_SIZE).asInstanceOf[Integer]).map(_.intValue)
-    def isStatsIteratorQuery: Boolean = hints.containsKey(STATS_STRING)
-    def getStatsIteratorQuery: String = hints.get(STATS_STRING).asInstanceOf[String]
+    def getArrowSort: Option[(String, Boolean)] =
+      Option(hints.get(ARROW_SORT_FIELD).asInstanceOf[String]).map { field =>
+        (field, Option(hints.get(ARROW_SORT_REVERSE)).exists(_.asInstanceOf[Boolean]))
+      }
+    def isStatsQuery: Boolean = hints.containsKey(STATS_STRING)
+    def getStatsQuery: String = hints.get(STATS_STRING).asInstanceOf[String]
     def isMapAggregatingQuery: Boolean = hints.containsKey(MAP_AGGREGATION)
     def getMapAggregatingAttribute: String = hints.get(MAP_AGGREGATION).asInstanceOf[String]
     def getTransformDefinition: Option[String] = Option(hints.get(Internal.TRANSFORMS).asInstanceOf[String])

@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.hbase.data
 
@@ -12,9 +12,9 @@ import java.util.Date
 
 import com.typesafe.scalalogging.LazyLogging
 import com.vividsolutions.jts.geom.Envelope
-import org.geotools.data.{Query, _}
 import org.geotools.data.collection.ListFeatureCollection
 import org.geotools.data.simple.SimpleFeatureStore
+import org.geotools.data.{Query, _}
 import org.geotools.factory.Hints
 import org.geotools.filter.text.ecql.ECQL
 import org.geotools.geometry.jts.ReferencedEnvelope
@@ -23,8 +23,8 @@ import org.joda.time.{DateTime, DateTimeZone}
 import org.locationtech.geomesa.features.ScalaSimpleFeature
 import org.locationtech.geomesa.hbase.data.HBaseDataStoreParams._
 import org.locationtech.geomesa.index.conf.QueryHints
-import org.locationtech.geomesa.index.utils.KryoLazyDensityUtils
-import org.locationtech.geomesa.utils.geotools.Conversions._
+import org.locationtech.geomesa.index.iterators.DensityScan
+import org.locationtech.geomesa.utils.collection.SelfClosingIterator
 import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
 import org.opengis.feature.simple.SimpleFeatureType
 import org.opengis.filter.Filter
@@ -44,7 +44,7 @@ class HBaseDensityFilterTest extends HBaseTest with LazyLogging {
 
   lazy val params = Map(
     ConnectionParam.getName -> connection,
-    BigTableNameParam.getName -> sftName)
+    BigTableNameParam.getName -> catalogTableName)
 
   lazy val ds = DataStoreFinder.getDataStore(params).asInstanceOf[HBaseDataStore]
 
@@ -52,6 +52,7 @@ class HBaseDensityFilterTest extends HBaseTest with LazyLogging {
   var fs: SimpleFeatureStore = _
 
   step {
+    logger.info("Starting the Density Filter Test")
     ds.getSchema(typeName) must beNull
     ds.createSchema(SimpleFeatureTypes.createType(typeName, TEST_FAMILY))
     sft = ds.getSchema(typeName)
@@ -181,6 +182,11 @@ class HBaseDensityFilterTest extends HBaseTest with LazyLogging {
     }
   }
 
+  step {
+    logger.info("Cleaning up HBase Density Test")
+    ds.dispose()
+  }
+
   def clearFeatures(): Unit = {
     val writer = ds.getFeatureWriter(typeName, Filter.INCLUDE, Transaction.AUTO_COMMIT)
     while (writer.hasNext) {
@@ -196,7 +202,7 @@ class HBaseDensityFilterTest extends HBaseTest with LazyLogging {
     q.getHints.put(QueryHints.DENSITY_BBOX, env)
     q.getHints.put(QueryHints.DENSITY_WIDTH, 500)
     q.getHints.put(QueryHints.DENSITY_HEIGHT, 500)
-    val decode = KryoLazyDensityUtils.decodeResult(env, 500, 500)
-    fs.getFeatures(q).features().flatMap(decode).toList
+    val decode = DensityScan.decodeResult(env, 500, 500)
+    SelfClosingIterator(fs.getFeatures(q).features).flatMap(decode).toList
   }
 }

@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.accumulo.iterators
 
@@ -20,6 +20,7 @@ import org.locationtech.geomesa.accumulo.{AccumuloFeatureIndexType, TestWithData
 import org.locationtech.geomesa.index.utils.ExplainString
 import org.locationtech.geomesa.utils.collection.SelfClosingIterator
 import org.locationtech.geomesa.utils.text.WKTUtils
+import org.specs2.matcher.MatchResult
 import org.specs2.mutable.Specification
 import org.specs2.runner.JUnitRunner
 
@@ -47,7 +48,7 @@ class AttributeIndexFilteringIteratorTest extends Specification with TestWithDat
 
   val ff = CommonFactoryFinder.getFilterFactory2
 
-  def checkStrategies[T](query: Query, strategy: AccumuloFeatureIndexType) = {
+  def checkStrategies[T](query: Query, strategy: AccumuloFeatureIndexType): MatchResult[Any] = {
     val out = new ExplainString
     val plan = ds.getQueryPlan(query)
     plan must haveLength(1)
@@ -110,7 +111,7 @@ class AttributeIndexFilteringIteratorTest extends Specification with TestWithDat
     "handle corner case with attr idx, bbox, and no temporal filter" in {
       val filter = ff.and(ECQL.toFilter("name = 'b'"), ECQL.toFilter("BBOX(geom, 30, 30, 50, 50)"))
       val query = new Query(sftName, filter, Array("geom"))
-      ds.queryPlanner.strategyDecider.getFilterPlan(sft, Some(ds), filter, None, None).head.index mustEqual Z2Index
+      ds.getQueryPlan(query).head.filter.index mustEqual AttributeIndex
 
       val features = SelfClosingIterator(fs.getFeatures(query)).toList
 

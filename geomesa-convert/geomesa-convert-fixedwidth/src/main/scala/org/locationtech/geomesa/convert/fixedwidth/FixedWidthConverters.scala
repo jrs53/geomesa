@@ -1,25 +1,25 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.convert.fixedwidth
 
 import com.typesafe.config.Config
-import org.locationtech.geomesa.convert.Transformers.{EvaluationContext, Expr}
+import org.locationtech.geomesa.convert.Transformers.Expr
 import org.locationtech.geomesa.convert._
 import org.opengis.feature.simple.SimpleFeatureType
 
 import scala.collection.immutable.IndexedSeq
 
-case class FixedWidthField(name: String, transform: Transformers.Expr, s: Int, w: Int) extends Field {
-  private val e = s + w
+case class FixedWidthField(name: String, transform: Transformers.Expr, start: Int, width: Int) extends Field {
+  private val endIdx: Int = start + width
   private val mutableArray = Array.ofDim[Any](1)
   override def eval(args: Array[Any])(implicit ec: EvaluationContext): Any = {
-    mutableArray(0) = args(0).asInstanceOf[String].substring(s, e)
+    mutableArray(0) = args(0).asInstanceOf[String].substring(start, endIdx)
     transform.eval(mutableArray)
   }
 }

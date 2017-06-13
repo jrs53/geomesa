@@ -1,10 +1,10 @@
 /***********************************************************************
-* Copyright (c) 2013-2016 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.accumulo.index.legacy.id
 
@@ -71,7 +71,7 @@ trait RecordQueryableIndex extends AccumuloFeatureIndex
       } else if (hints.isDensityQuery) {
         val iter = KryoLazyDensityIterator.configure(sft, this, filter.secondary, hints, dupes)
         (Seq(iter), KryoLazyDensityIterator.kvsToFeatures(), None)
-      } else if (hints.isStatsIteratorQuery) {
+      } else if (hints.isStatsQuery) {
         val iter = KryoLazyStatsIterator.configure(sft, this, filter.secondary, hints, dupes)
         val reduce = Some(KryoLazyStatsUtils.reduceFeatures(sft, hints)(_))
         (Seq(iter), KryoLazyStatsIterator.kvsToFeatures(sft), reduce)

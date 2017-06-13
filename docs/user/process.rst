@@ -1,40 +1,47 @@
+.. _geomesa-process:
+
 GeoMesa Processes
 =================
 
 The following analytic processes are available and optimized on GeoMesa
 data stores, found in the ``geomesa-process`` module:
 
+org.locationtech.geomesa.process.transform.ArrowConversionProcess
+org.locationtech.geomesa.process.transform.-
+
+-  ``ArrowConversionProcess`` - encodes simple features in the `Apache Arrow <https://arrow.apache.org/>`_ format
+-  ``BinConversionProcess`` - encodes simple features in a minimized 16-byte format
 -  :ref:`density_process` - computes a density heatmap for a CQL query
--  ``HashAttributeColorProcess`` and ``HashAttributeProcess`` - computes an
+-  ``HashAttributeProcess``/``HashAttributeColorProcess`` - computes an
    additional 'hash' attribute which is useful for styling.
--  ``JoinProcess`` - returns merged features from two different schemas
-   using a common attribute field
+-  ``JoinProcess`` - merges features from two different schemas using a common attribute field
 -  ``KNearestNeighborSearchProcess`` - performs a KNN search
--  ``Point2PointProcess`` - aggregates a collection of points into a
-   collection of line segments
--  ``ProximitySearchProcess`` - performs a nearest neighbor search
+-  ``Point2PointProcess`` - aggregates a collection of points into a collection of line segments
+-  ``ProximitySearchProcess`` - searches near a set input features
 -  :ref:`query_process` - performs a Geomesa optimized query using spatiotemporal indexes
+-  ``RouteSearchProcess`` - matches features traveling along a given route
 -  ``SamplingProcess`` - uses statistical sampling to reduces the features
    returned by a query
 -  :ref:`statsiterator_process` - returns various stats for a CQL query
--  ``TubeSelectProcess`` - performs a correlated search across
-   time/space dimensions
--  :ref:`unique_process` - identifies unique values for an attribute in
-   results of a CQL query
+-  ``TrackLabelProcess`` - selects the last feature in a track based on a common attribute, useful for styling
+-  ``TubeSelectProcess`` - performs a correlated search across time and space
+-  :ref:`unique_process` - identifies unique values for an attribute
+
+Where possible, the calculations are pushed out to a distributed system for faster performance. Currently
+this has been implemented in the Accumulo data store and partially in the HBase data store. Other
+back-ends can still be used, but local processing will be used.
 
 Installation
 ------------
 
-The above extensions are particular to the Accumulo data store.
-
 While they can be used independently, the common use case is to use them
 with GeoServer. To deploy them in GeoServer, one will require:
-	a) the GeoMesa Accumulo datastore plugin
+	a) a GeoMesa datastore plugin
 	b) the GeoServer WPS extension
-	c) the ``geomesa-process-${VERSION}.jar`` to be deployed in
+	c) the ``geomesa-process-wps_2.11-${VERSION}.jar`` to be deployed in
 		``${GEOSERVER_HOME}/WEB-INF/lib``.
 
-The GeoMesa Accumulo datastore plugin and GeoMesa process jars are both
+The GeoMesa datastore plugin and GeoMesa process jars are both
 available in the binary distribution in the gs-plugins directory.
 
 Documentation about the GeoServer WPS Extension (including download
@@ -42,7 +49,7 @@ instructions) is available here:
 http://docs.geoserver.org/stable/en/user/services/wps/install.html.
 
 To verify the install, start GeoServer, and you should see a line like
-``INFO [geoserver.wps] - Found 11 bindable processes in GeoMesa Process Factory``.
+``INFO [geoserver.wps] - Found 15 bindable processes in GeoMesa Process Factory``.
 
 In the GeoServer web UI, click 'Demos' and then 'WPS request builder'.
 From the request builder, under 'Choose Process', click on any of the
@@ -57,8 +64,7 @@ Processors
 DensityProcess
 ^^^^^^^^^^^^^^
 
-The ``DensityProcess`` computes a density map over a set of features stored in GeoMesa. The calculations are pushed down
-to the Accumulo iterators allowing for fast performance. A raster image is returned.
+The ``DensityProcess`` computes a density map over a set of features stored in GeoMesa. A raster image is returned.
 
 ============  ===========
 Parameters    Description
@@ -73,11 +79,10 @@ outputHeight  Height of the output raster in pixels.
 
 .. _statsiterator_process:
 
-StatsIteratorProcess
-^^^^^^^^^^^^^^^^^^^^
+StatsProcess
+^^^^^^^^^^^^
 
-The ``StatsIteratorProcess`` allows the running of statistics on a given feature set. The statics calculations are pushed
-down to the Accumulo iterators allowing for fast performance.
+The ``StatsProcess`` allows the running of statistics on a given feature set.
 
 ==========  ===========
 Parameters  Description
@@ -178,7 +183,7 @@ QueryProcess
 ^^^^^^^^^^^^
 
 The ``QueryProcess`` takes an (E)CQL query/filter for a given feature set as a text object and returns
-the result as a json object. Queries are pushed to Accumulo iterators allowing for very fast performance.
+the result as a json object.
 
 ==========  ===========
 Parameters  Description
@@ -266,7 +271,7 @@ UniqueProcess
 ^^^^^^^^^^^^^
 
 The ``UniqueProcess`` class is optimized for GeoMesa to find unique attributes values for a feature collection,
-which are returned as a json object. Queries are pushed to Accumulo iterators allowing for very fast performance.
+which are returned as a json object.
 
 ===========  ===========
 Parameters   Description
@@ -371,7 +376,7 @@ Chaining Processes
 WPS processes can be chained, using the result of one process as the input for another. For example, a bounding box
 in a GeoMesa :ref:`query_process` can be used to restrict data sent to :ref:`statsiterator_process`. 
 :download:`GeoMesa_WPS_chain_example.xml </user/_static/process/GeoMesa_WPS_chain_example.xml>` will get all points from
-the AccumuloQuickStart table that are within a specified bounding box (-77.5, -37.5, -76.5, -36.5), and calulate
+the AccumuloQuickStart table that are within a specified bounding box (-77.5, -37.5, -76.5, -36.5), and calculate
 descriptive statistics on the 'What' attribute of the results.
 
 
@@ -398,5 +403,3 @@ The query should generate results that look like this:
 	    }
 	  ]
 	}
-
-

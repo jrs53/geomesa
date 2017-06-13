@@ -1,11 +1,11 @@
 /***********************************************************************
-* Copyright (c) 2017 IBM
-* Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2017 IBM
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.cassandra.index
 
@@ -55,8 +55,8 @@ case object CassandraAttributeIndex
       }
       lexicoded = new String(row, offset, nullByte - offset, StandardCharsets.UTF_8)
       offset = nullByte + 1
-      if (offset < row.length) {
-        val secondaryIndexLength = getSecondaryIndexKeyLength(sft)
+      val secondaryIndexLength = getSecondaryIndexKeyLength(sft)
+      if (offset + secondaryIndexLength < row.length) {
         secondaryIndex = ByteBuffer.wrap(row, offset, secondaryIndexLength)
         offset += secondaryIndexLength
         if (offset < row.length) {

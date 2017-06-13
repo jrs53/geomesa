@@ -1,21 +1,22 @@
 /***********************************************************************
-* Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
-* All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Apache License, Version 2.0
-* which accompanies this distribution and is available at
-* http://www.opensource.org/licenses/apache2.0.php.
-*************************************************************************/
+ * Copyright (c) 2013-2017 Commonwealth Computer Research, Inc.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Apache License, Version 2.0
+ * which accompanies this distribution and is available at
+ * http://www.opensource.org/licenses/apache2.0.php.
+ ***********************************************************************/
 
 package org.locationtech.geomesa.bigtable.index
 
 import com.google.cloud.bigtable.hbase.BigtableExtendedScan
 import com.google.common.collect.Lists
 import com.typesafe.scalalogging.LazyLogging
+import org.apache.hadoop.hbase.TableName
 import org.apache.hadoop.hbase.client.{Get, Query, Result, Scan}
 import org.apache.hadoop.hbase.filter.MultiRowRangeFilter.RowRange
 import org.apache.hadoop.hbase.filter.{MultiRowRangeFilter, Filter => HFilter}
-import org.apache.hadoop.hbase.{Coprocessor, TableName}
 import org.geotools.factory.Hints
+import org.locationtech.geomesa.hbase.coprocessor.utils.CoprocessorConfig
 import org.locationtech.geomesa.hbase.data.{HBaseDataStore, HBaseQueryPlan, ScanPlan}
 import org.locationtech.geomesa.hbase.index._
 import org.locationtech.geomesa.hbase.{HBaseFilterStrategyType, HBaseIndexManagerType}
@@ -48,8 +49,8 @@ trait BigtablePlatform extends HBasePlatform with LazyLogging {
                                      hints: Hints,
                                      ranges: Seq[Query],
                                      table: TableName,
-                                     hbaseFilters: Seq[HFilter],
-                                     coprocessor: Option[Coprocessor],
+                                     hbaseFilters: Seq[(Int, HFilter)],
+                                     coprocessor: Option[CoprocessorConfig],
                                      toFeatures: (Iterator[Result]) => Iterator[SimpleFeature]): HBaseQueryPlan = {
     if (hbaseFilters.nonEmpty) {
       // bigtable does support some filters, but currently we only use custom filters that aren't supported

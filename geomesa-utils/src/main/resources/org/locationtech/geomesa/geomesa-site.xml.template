@@ -173,6 +173,17 @@
     </property>
 
     <property>
+        <name>geomesa.strategy.decider</name>
+        <value></value>
+        <description>This property allows for overriding strategy selection during query
+            planning. It should specify the full class name for a class implementing
+            `org.locationtech.geomesa.index.planning.StrategyDecider`. The class must
+            have a no-arg constructor.
+        </description>
+        <final>false</final>
+    </property>
+
+    <property>
         <name>geomesa.query.timeout.millis</name>
         <value></value>
         <description>This property can be used to prevent long-running
@@ -262,6 +273,15 @@
         <description>Enable usage of the server-side HBase Filters for GeoMesa. This requires installation
             of the HBase Distributed Runtime jar which enables pushdown predicates of ECQL filters to be executed
             on HBase Region Servers instead of in client code.
+        </description>
+        <final>false</final>
+    </property>
+
+    <property>
+        <name>geomesa.hbase.coprocessor.path</name>
+        <value></value>
+        <description>HDFS or local path to GeoMesa-HBase Coprocessor JAR. If a local path is provided it must be the same for
+            all region server. A path provided through the DataStore parameters will always override this property.
         </description>
         <final>false</final>
     </property>
