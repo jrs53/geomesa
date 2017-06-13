@@ -22,6 +22,7 @@ import org.apache.accumulo.core.util.{Pair => AccPair}
 import org.apache.commons.collections.map.CaseInsensitiveMap
 import org.apache.hadoop.io.{Text, Writable}
 import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.security.token.Token
 import org.geotools.data.{DataStoreFinder, Query}
 import org.geotools.filter.identity.FeatureIdImpl
 import org.geotools.filter.text.ecql.ECQL
@@ -181,15 +182,36 @@ class GeoMesaAccumuloInputFormat extends InputFormat[Text, SimpleFeature] with L
     } else {
       // Kerberos auth
 
-      // Look for a delegation token in the context
-      val hadoopWrappedToken = context.getCredentials.getAllTokens find (_.getKind.toString=="ACCUMULO_AUTH_TOKEN")
+      // Look for a delegation token in the context credentials (for MapReduce)
+      val contextCredentialsToken = context.getCredentials.getAllTokens find (_.getKind.toString=="ACCUMULO_AUTH_TOKEN")
+      if (contextCredentialsToken.isDefined) {
+        logger.info("Found ACCUMULO_AUTH_TOKEN in context credentials")
+      } else {
+        logger.info("Could not find ACCUMULO_AUTH_TOKEN in context credentials, will look in configuration")
+      }
 
+      // Look for a delegation token in the configuration (for Spark on YARN)
+      val serialisedToken = context.getConfiguration.get("org.locationtech.geomesa.token")
+      val configToken = if (serialisedToken!=null) {
+        logger.info("Found ACCUMULO_AUTH_TOKEN serialised in configuration")
+        val t = new Token()
+        t.decodeFromUrlString(serialisedToken)
+        Some(t)
+      } else {
+        logger.warn("Could not find ACCUMULO_AUTH_TOKEN serialised in configuration. Continuing anyway...")
+        None
+      }
+
+      // Prefer token from context credentials over configuration
+      val hadoopWrappedToken = contextCredentialsToken  orElse configToken
+
+      // Unwrap token and build connector
       hadoopWrappedToken match {
         case Some(hwt) => {
           val identifier = new AuthenticationTokenIdentifier
           val token =  try {
             // Convert to DelegationToken.
-            // Code taken from https://github.com/apache/accumulo/blob/f81a8ec7410e789d11941351d5899b8894c6a322/core/src/main/java/org/apache/accumulo/core/client/mapreduce/lib/impl/ConfiguratorBase.java#L485-L500
+            // See https://github.com/apache/accumulo/blob/f81a8ec7410e789d11941351d5899b8894c6a322/core/src/main/java/org/apache/accumulo/core/client/mapreduce/lib/impl/ConfiguratorBase.java#L485-L500
             identifier.readFields(new DataInputStream(new ByteArrayInputStream(hwt.getIdentifier)))
             new DelegationTokenImpl(hwt.getPassword, identifier)
           } catch {
@@ -210,7 +232,7 @@ class GeoMesaAccumuloInputFormat extends InputFormat[Text, SimpleFeature] with L
           // Get datastore using updated params
           DataStoreFinder.getDataStore(new CaseInsensitiveMap(updatedParams).asInstanceOf[java.util.Map[_, _]]).asInstanceOf[AccumuloDataStore]
         }
-        case _ => throw new IllegalArgumentException("Could not find Hadoop-wrapped Accumulo token in JobContext credentials")
+        case _ => throw new IllegalArgumentException("Could not find Hadoop-wrapped Accumulo token in JobContext credentials or Hadoop configuration")
       }
     }
 

@@ -9,19 +9,21 @@
 
 package org.locationtech.geomesa.spark.accumulo
 
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.accumulo.core.client.ClientConfiguration
-import org.apache.accumulo.core.client.mapreduce.{AbstractInputFormat, AccumuloInputFormat}
+import org.apache.accumulo.core.client.mapred.AbstractInputFormat
+import org.apache.accumulo.core.client.mapreduce.AccumuloInputFormat
 import org.apache.accumulo.core.client.mapreduce.lib.impl.InputConfigurator
-import org.apache.accumulo.core.client.mapreduce.lib.util.ConfiguratorBase
 import org.apache.accumulo.core.client.security.tokens.{KerberosToken, PasswordToken}
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.accumulo.core.util.{Pair => AccPair}
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.rdd.{NewHadoopRDD, RDD}
 import org.geotools.data.{DataStoreFinder, Query, Transaction}
 import org.geotools.filter.text.ecql.ECQL
 import org.locationtech.geomesa.accumulo.data.{AccumuloDataStore, AccumuloDataStoreFactory, AccumuloDataStoreParams}
@@ -30,16 +32,14 @@ import org.locationtech.geomesa.index.conf.QueryHints._
 import org.locationtech.geomesa.jobs.GeoMesaConfigurator
 import org.locationtech.geomesa.jobs.accumulo.AccumuloJobUtils
 import org.locationtech.geomesa.jobs.mapreduce._
-import org.locationtech.geomesa.spark.SpatialRDD
-import org.locationtech.geomesa.spark.SpatialRDDProvider
+import org.locationtech.geomesa.spark.{SpatialRDD, SpatialRDDProvider}
 import org.locationtech.geomesa.utils.geotools.FeatureUtils
 import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
 import org.opengis.filter.Filter
 
 import scala.collection.JavaConversions._
-import scala.util.Try
 
-class AccumuloSpatialRDDProvider extends SpatialRDDProvider {
+class AccumuloSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
   import org.locationtech.geomesa.spark.CaseInsensitiveMapFix._
 
   override def canProcess(params: java.util.Map[String, java.io.Serializable]): Boolean =
@@ -50,19 +50,6 @@ class AccumuloSpatialRDDProvider extends SpatialRDDProvider {
                    params: Map[String, String],
                    query: Query): SpatialRDD = {
     val ds = DataStoreFinder.getDataStore(params).asInstanceOf[AccumuloDataStore]
-    val username = AccumuloDataStoreParams.userParam.lookUp(params).toString
-
-    // Precisely one of these should be set due to prior validation
-    val password = AccumuloDataStoreParams.passwordParam.lookUp(params)
-    val keytabPath = AccumuloDataStoreParams.keytabPathParam.lookUp(params)
-
-    // Create authentication token according to password or Kerberos
-    val authToken = if(password != null) {
-      new PasswordToken(password.toString.getBytes)
-    } else {
-      // Accumulo takes care of creating DelegationToken for us
-      new KerberosToken(username, new java.io.File(keytabPath.toString), true)
-    }
 
     lazy val transform = query.getHints.getTransformSchema
 
@@ -70,10 +57,6 @@ class AccumuloSpatialRDDProvider extends SpatialRDDProvider {
       if (ds == null || sft == null || qp.isInstanceOf[EmptyPlan]) {
         sc.emptyRDD[SimpleFeature]
       } else {
-
-        // Accumulo configuration takes place in GeoMesaAccumuloInputFormat.init
-        // This is so that a Kerberos token can be included in the Job
-
         InputConfigurator.setInputTableName(classOf[AccumuloInputFormat], conf, qp.table)
         InputConfigurator.setRanges(classOf[AccumuloInputFormat], conf, qp.ranges)
         qp.iterators.foreach(InputConfigurator.addIterator(classOf[AccumuloInputFormat], conf, _))
@@ -104,7 +87,55 @@ class AccumuloSpatialRDDProvider extends SpatialRDDProvider {
           InputConfigurator.setScanAuthorizations(classOf[AccumuloInputFormat], conf, authorizations)
         }
 
-        sc.newAPIHadoopRDD(conf, classOf[GeoMesaAccumuloInputFormat], classOf[Text], classOf[SimpleFeature]).map(U => U._2)
+        // We soon want to call this
+        // sc.newAPIHadoopRDD(conf, classOf[GeoMesaAccumuloInputFormat], classOf[Text], classOf[SimpleFeature]).map(U => U._2)
+        // But we need access to the JobConf that this creates internally and doesn't expose, so we repeat (most of) the code here
+
+        // From sc.newAPIHadoopRDD, but can't implement this here
+        // assertNotStopped()
+
+        // From sc.newAPIHadoopRDD
+        // Add necessary security credentials to the JobConf. Required to access secure HDFS.
+        val jconf = new JobConf(conf)
+        SparkHadoopUtil.get.addCredentials(jconf)
+
+        // Get username from params
+        val username = AccumuloDataStoreParams.userParam.lookUp(params).toString
+
+        // Get password or keytabPath from params. Precisely one of these should be set due to prior validation
+        val password = AccumuloDataStoreParams.passwordParam.lookUp(params)
+        val keytabPath = AccumuloDataStoreParams.keytabPathParam.lookUp(params)
+
+        // Create authentication token according to password or Kerberos
+        val authToken = if (password != null) {
+          new PasswordToken(password.toString.getBytes)
+        } else {
+          // setConnectorInfo will take care of creating a DelegationToken for us
+          new KerberosToken(username, new java.io.File(keytabPath.toString), true)
+        }
+
+        // Get params and set ZooKeeperInstance
+        val instance = AccumuloDataStoreParams.instanceIdParam.lookUp(params).asInstanceOf[String]
+        val zookeepers = AccumuloDataStoreParams.zookeepersParam.lookUp(params).asInstanceOf[String]
+        AbstractInputFormat.setZooKeeperInstance(jconf, new ClientConfiguration()
+          .withInstance(instance).withZkHosts(zookeepers).withSasl(authToken.isInstanceOf[KerberosToken]))
+
+        // Set connectorInfo. This will add a DelegationToken to jconf.getCredentials
+        val user = AccumuloDataStoreParams.userParam.lookUp(params).asInstanceOf[String]
+        AbstractInputFormat.setConnectorInfo(jconf, user, authToken)
+
+        // Iterate over tokens in credentials and add the Accumulo one to the configuration directly
+        // This is because the credentials seem to disappear between here and the YARN executor
+        // See https://stackoverflow.com/questions/44525351/delegation-tokens-with-accumulo-spark
+        for (tok <- jconf.getCredentials.getAllTokens) {
+          if (tok.getKind.toString=="ACCUMULO_AUTH_TOKEN") {
+            logger.info("Adding ACCUMULO_AUTH_TOKEN to configuration")
+            jconf.set("org.locationtech.geomesa.token", tok.encodeToUrlString())
+          }
+        }
+
+        // From sc.newAPIHadoopRDD
+        new NewHadoopRDD(sc, classOf[GeoMesaAccumuloInputFormat], classOf[Text], classOf[SimpleFeature], jconf).map(U => U._2)
       }
     }
 
