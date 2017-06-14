@@ -38,6 +38,7 @@ import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
 import org.opengis.filter.Filter
 
 import scala.collection.JavaConversions._
+import scala.util.Try
 
 class AccumuloSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
   import org.locationtech.geomesa.spark.CaseInsensitiveMapFix._
@@ -114,13 +115,17 @@ class AccumuloSpatialRDDProvider extends SpatialRDDProvider with LazyLogging {
           new KerberosToken(username, new java.io.File(keytabPath.toString), true)
         }
 
-        // Get params and set ZooKeeperInstance
+        // Get params and set instance
         val instance = AccumuloDataStoreParams.instanceIdParam.lookUp(params).asInstanceOf[String]
         val zookeepers = AccumuloDataStoreParams.zookeepersParam.lookUp(params).asInstanceOf[String]
-        AbstractInputFormat.setZooKeeperInstance(jconf, new ClientConfiguration()
-          .withInstance(instance).withZkHosts(zookeepers).withSasl(authToken.isInstanceOf[KerberosToken]))
+        if (Try(params("useMock").toBoolean).getOrElse(false)){
+          AbstractInputFormat.setMockInstance(jconf, instance)
+        } else {
+          AbstractInputFormat.setZooKeeperInstance(jconf, new ClientConfiguration()
+            .withInstance(instance).withZkHosts(zookeepers).withSasl(authToken.isInstanceOf[KerberosToken]))
+        }
 
-        // Set connectorInfo. This will add a DelegationToken to jconf.getCredentials
+        // Set connectorInfo. If needed, this will add a DelegationToken to jconf.getCredentials
         val user = AccumuloDataStoreParams.userParam.lookUp(params).asInstanceOf[String]
         AbstractInputFormat.setConnectorInfo(jconf, user, authToken)
 
