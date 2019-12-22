@@ -40,6 +40,11 @@ trait AccumuloDataStoreCommand extends DataStoreCommand[AccumuloDataStore] {
       }
     }
 
+    // params.tgt is a CLI param indicating use Kerberos tgt, but this doesn't map to a AccumuloDataStoreParams member
+    // The equivalent is omitting the password and keytab, and optionally omitting the user.
+    // This needs to be an explicit CLI param in order to distinguish the case of using non-Kerberos auth and
+    // wanting to prompt the user for a password.
+
     Map[String, String](
       InstanceIdParam.key   -> params.instance,
       ZookeepersParam.key   -> params.zookeepers,

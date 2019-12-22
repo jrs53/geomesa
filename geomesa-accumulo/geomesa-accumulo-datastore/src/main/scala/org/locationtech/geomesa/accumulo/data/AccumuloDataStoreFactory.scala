@@ -15,10 +15,12 @@ import java.io.Serializable
 import java.util.{Map => JMap}
 
 import com.google.common.collect.ImmutableMap
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.accumulo.core.client.ClientConfiguration.ClientProperty
 import org.apache.accumulo.core.client.mock.{MockConnector, MockInstance}
 import org.apache.accumulo.core.client.security.tokens.{AuthenticationToken, KerberosToken, PasswordToken}
 import org.apache.accumulo.core.client.{ClientConfiguration, Connector, ZooKeeperInstance}
+import org.apache.hadoop.security.UserGroupInformation
 import org.geotools.data.DataAccessFactory.Param
 import org.geotools.data.{DataStoreFactorySpi, Parameter}
 import org.locationtech.geomesa.accumulo.AccumuloVersion
@@ -60,13 +62,13 @@ class AccumuloDataStoreFactory extends DataStoreFactorySpi {
   override def getParametersInfo: Array[Param] =
     AccumuloDataStoreFactory.ParameterInfo ++ Array(NamespaceParam, DeprecatedGeoServerPasswordParam)
 
-  override def canProcess(params: java.util.Map[String,Serializable]): Boolean =
+  override def canProcess(params: java.util.Map[String, Serializable]): Boolean =
     AccumuloDataStoreFactory.canProcess(params)
 
   override def getImplementationHints: java.util.Map[RenderingHints.Key, _] = null
 }
 
-object AccumuloDataStoreFactory extends GeoMesaDataStoreInfo {
+object AccumuloDataStoreFactory extends GeoMesaDataStoreInfo with LazyLogging {
 
   import org.locationtech.geomesa.accumulo.data.AccumuloDataStoreParams._
 
@@ -101,42 +103,77 @@ object AccumuloDataStoreFactory extends GeoMesaDataStoreInfo {
 
   override def canProcess(params: java.util.Map[String, _ <: Serializable]): Boolean = {
     val hasConnector = ConnectorParam.lookupOpt(params).isDefined
+
     def hasConnection = InstanceIdParam.exists(params) && ZookeepersParam.exists(params) && UserParam.exists(params)
+
     def hasMock = InstanceIdParam.exists(params) && UserParam.exists(params) && MockParam.lookupOpt(params).contains(java.lang.Boolean.TRUE)
-    def hasPassword = PasswordParam.exists(params) && !KeytabPathParam.exists(params)
-    def hasKeytab = !PasswordParam.exists(params) && KeytabPathParam.exists(params) && isKerberosAvailable
-    hasConnector || ((hasConnection || hasMock) && (hasPassword || hasKeytab))
+
+    def hasUser = UserParam.exists(params)
+
+    def hasPassword = PasswordParam.exists(params)
+
+    def hasKeytab = KeytabPathParam.exists(params)
+
+    hasConnector ||
+      ((hasConnection || hasMock) &&
+        (hasUser && hasPassword && !hasKeytab) || // user & password (non-Kerberos) auth
+        (hasUser && !hasPassword && hasKeytab && isKerberosAvailable) || // user & keytab (Kerberos)
+        (hasUser && !hasPassword && !hasKeytab && isKerberosAvailable) || // user & implicit tgt (Kerberos)
+        (!hasUser && !hasPassword && !hasKeytab && isKerberosAvailable)) // implicit user & tgt (Kerberos)
   }
 
-  def buildAccumuloConnector(params: JMap[String,Serializable], useMock: Boolean): Connector = {
+  def buildAccumuloConnector(params: JMap[String, Serializable], useMock: Boolean): Connector = {
     val instance = InstanceIdParam.lookup(params)
-    val user = UserParam.lookup(params)
-    val password = PasswordParam.lookup(params)
-    val keytabPath = KeytabPathParam.lookup(params)
+    val user = Option(UserParam.lookup(params))
+    val password = Option(PasswordParam.lookup(params))
+    val keytabPath = Option(KeytabPathParam.lookup(params))
 
     // Build authentication token according to how we are authenticating
-    val authToken : AuthenticationToken = if (password != null && keytabPath == null) {
-      new PasswordToken(password.getBytes("UTF-8"))
-    } else if (password == null && keytabPath != null) {
-      if(!useMock) {
-        // This API is only in Accumulo >=1.7, but canProcess should ensure this isn't actually invoked on earlier
-        new KerberosToken(user, new java.io.File(keytabPath), true)
-      } else {
-        // Mock doesn't support Kerberos, so give it a pretend PasswordTOken
+    // Don't have to exhaustively pattern match because canProcess should do that
+    val authToken: AuthenticationToken = (user, password, keytabPath, useMock) match {
+
+      // Plain username & password
+      case (Some(user), Some(password), _, _) =>
+        logger.info("Using username & password auth")
+        new PasswordToken(password.getBytes("UTF-8"))
+
+      // Kerberos options. APIs are only in Accumulo >=1.7, but canProcess should ensure this isn't actually invoked on earlier
+      // With proxy authentication this needs ACCUMULO-4665/4666 fixed i.e. >= 1.7.4 / 1.9.0
+
+      // Mock doesn't support Kerberos, so use a dummy password
+      case (_, _, _, true) =>
+        logger.info("Using mock username & password auth")
         new PasswordToken("".getBytes("UTF-8"))
-      }
-    } else {
-      // Should never reach here thanks to canProcess
-      throw new IllegalArgumentException("Neither or both of password & keytabPath are set")
+
+      // Implicit username and tgt
+      case (None, _, _, _) =>
+        logger.info("Using implicit username & tgt auth")
+        logger.debug(s"Current Hadoop user is ${UserGroupInformation.getCurrentUser.getUserName}")
+        new KerberosToken()
+
+      // User and tgt
+      case (Some(user), _, None, _) =>
+        logger.info("Using explicit username & tgt auth")
+        new KerberosToken(user)
+
+      // User and keytab
+      // Note this ctor is deprecated and changing the Hadoop user can cause unexpected side effects
+      // e.g. if subsequently writing to HDFS
+      case (Some(user), _, Some(keytabPath), _) =>
+        logger.info("Using explicit username and keytab auth")
+        new KerberosToken(user, new java.io.File(keytabPath), true)
     }
 
+    // If not specified, get the username for the connector from Hadoop
+    val connectorUserName = user.getOrElse(UserGroupInformation.getCurrentUser.getUserName)
+
     if (useMock) {
-      new MockInstance(instance).getConnector(user, authToken)
+      new MockInstance(instance).getConnector(connectorUserName, authToken)
     } else {
       val zookeepers = ZookeepersParam.lookup(params)
       // NB: For those wanting to set this via JAVA_OPTS, this key is "instance.zookeeper.timeout" in Accumulo 1.6.x.
       val timeout = GeoMesaSystemProperties.getProperty(ClientProperty.INSTANCE_ZK_TIMEOUT.getKey)
-      val clientConfiguration = if (timeout !=  null) {
+      val clientConfiguration = if (timeout != null) {
         new ClientConfiguration()
           .withInstance(instance)
           .withZkHosts(zookeepers)
@@ -147,11 +184,11 @@ object AccumuloDataStoreFactory extends GeoMesaDataStoreInfo {
 
       if (authToken.isInstanceOf[PasswordToken]) {
         // Using password authentication
-        new ZooKeeperInstance(clientConfiguration).getConnector(user, authToken)
+        new ZooKeeperInstance(clientConfiguration).getConnector(connectorUserName, authToken)
       } else {
         // Otherwise must be using Kerberos authentication, in which case we explicitly enable SASL.
         // This shouldn't be required if Accumulo client.conf is set appropriately, but it doesn't seem to work.
-        new ZooKeeperInstance(clientConfiguration.withSasl(true)).getConnector(user, authToken)
+        new ZooKeeperInstance(clientConfiguration.withSasl(true)).getConnector(connectorUserName, authToken)
       }
     }
   }
@@ -163,7 +200,9 @@ object AccumuloDataStoreFactory extends GeoMesaDataStoreInfo {
     val auditProvider = buildAuditProvider(params)
 
     // if explicit, use param, else if mocked, false, else use default
-    val auditQueries = if (AuditQueriesParam.exists(params)) { AuditQueriesParam.lookup(params).booleanValue() } else {
+    val auditQueries = if (AuditQueriesParam.exists(params)) {
+      AuditQueriesParam.lookup(params).booleanValue()
+    } else {
       !connector.isInstanceOf[MockConnector] && AuditQueriesParam.default
     }
     val auditService = new AccumuloAuditService(connector, authProvider, s"${catalog}_queries", auditQueries)
@@ -266,7 +305,7 @@ object AccumuloDataStoreParams extends GeoMesaDataStoreParams with SecurityParam
     new GeoMesaParam[String](
       "accumulo.user",
       "Accumulo user",
-      optional = false,
+      optional = true,
       deprecatedKeys = Seq("user"),
       supportsNiFiExpressions = true)
 

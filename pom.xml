@@ -298,6 +298,14 @@
                 </pluginRepository>
             </pluginRepositories>
         </profile>
+        <profile>
+            <!-- Some builds will need a newer Accumulo bundling -->
+            <!-- e.g. for geomesa-accumulo-spark to address Kerberos bugs -->
+            <id>accumulo-1.9</id>
+            <properties>
+                <accumulo.version>1.9.3</accumulo.version>
+            </properties>
+        </profile>
     </profiles>
 
     <dependencies>
@@ -2438,7 +2446,7 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
+            </plugin><!--
             <plugin>
                 <groupId>com.mycila</groupId>
                 <artifactId>license-maven-plugin</artifactId>
@@ -2451,7 +2459,7 @@
                         <phase>validate</phase>
                     </execution>
                 </executions>
-            </plugin>
+            </plugin>-->
             <plugin>
                 <!-- running `mvn process-resources -N` will generate a new GeoMesa README.md -->
                 <groupId>org.apache.maven.plugins</groupId>
@@ -2492,7 +2500,7 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
+            </plugin><!--
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
@@ -2515,7 +2523,7 @@
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
+            </plugin>-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>

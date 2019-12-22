@@ -76,12 +76,34 @@ trait RunnerWithAccumuloEnvironment extends Runner {
   override def resolveEnvironment(command: Command): Unit = {
     val params = Option(command.params)
 
-    // If password not supplied, and not using keytab, prompt for it
-    // Error if both password and keytab supplied
+    // Authentication parameter validation
+    // Valid combinations are
+    //     User    |    Password    |    Keytab    |    Tgt    |    Notes
+    // ------------|----------------|--------------|-----------|--------------------
+    //   Present   |    Absent      |    Absent    |   Absent  | Prompt for password
+    //   Present   |    Present     |    Absent    |   Absent  |
+    //   Present   |    Absent      |    Present   |   Absent  | Kerberos
+    //   Present   |    Absent      |    Absent    |   Present | Kerberos
+    //   Absent    |    Absent      |    Absent    |   Present | Kerberos
     params.collect {
-      case p: AccumuloConnectionParams if p.password != null && p.keytab != null =>
-        throw new ParameterException("Cannot specify both password and keytab")
-      case p: AccumuloConnectionParams if p.password == null && p.keytab == null && !p.mock => p
+
+      // Need to prompt for password
+      case p: AccumuloConnectionParams
+        if p.user != null && p.password == null && p.keytab == null && !p.tgt =>
+          p // ready for the foreach
+
+      case p: AccumuloConnectionParams
+        if p.user == null && !p.tgt  =>
+        throw new ParameterException("Must specify user if not using tgt")
+
+      case p: AccumuloConnectionParams
+        if p.user != null && Seq(p.password != null, p.keytab != null, p.tgt ).count(_ == true) > 1 =>
+          throw new ParameterException("Must specify precisely one of password, keytab & tgt")
+
+      case p: AccumuloConnectionParams
+        if p.tgt && Seq(p.password != null, p.keytab != null).count(_ == true) > 0 =>
+          throw new ParameterException("Must not specify password or keytab when using tgt")
+
     }.foreach(_.password = Prompt.readPassword())
 
     // Attempt to look up the instance ONLY if we are not in mock mode

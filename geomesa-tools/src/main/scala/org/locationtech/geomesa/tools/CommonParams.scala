@@ -56,14 +56,17 @@ trait PasswordParams {
   var password: String = _
 }
 
-trait KerberosParams {
-  @Parameter(names = Array("--keytab"), description = "Path to Kerberos keytab file")
-  var keytab: String = _
-}
-
 trait RequiredCredentialsParams extends PasswordParams {
   @Parameter(names = Array("-u", "--user"), description = "Connection user name", required = true)
   var user: String = _
+}
+
+trait KerberosParams {
+  @Parameter(names = Array("--keytab"), description = "Path to Kerberos keytab file")
+  var keytab: String = _
+
+  @Parameter(names = Array("--tgt"), description = "Use cached tgt rather than keytab")
+  var tgt: Boolean = false
 }
 
 trait OptionalCredentialsParams extends PasswordParams {
