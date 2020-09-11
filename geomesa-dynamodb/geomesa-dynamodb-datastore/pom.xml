@@ -12,6 +12,12 @@
     <artifactId>geomesa-dynamodb-datastore_2.11</artifactId>
     <name>GeoMesa DynamoDB DataStore</name>
 
+    <properties>
+        <!-- Don't fork in tests to ensure only single DynamoDB Local instance running at a time -->
+        <test.fork.count>1</test.fork.count>
+        <test.fork.reuse>false</test.fork.reuse>
+    </properties>
+
     <dependencies>
 
         <dependency>

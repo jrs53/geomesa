@@ -23,16 +23,18 @@ class DynamoDbDataStoreFactoryTest extends Specification {
   // TODO: consider port collisions
   private val DYNAMODB_PORT = "8000"
 
+  // DynamoDB Local needs native sqlite4java libs; maven-dependency-plugin should put them here
+  System.setProperty("sqlite4java.library.path", "target/test-classes/native-libs")
+
+  // Create local DynamoDB for this test
+  private val server = ServerRunner.createServerFromCommandLineArgs(Array("-inMemory", "-port", DYNAMODB_PORT, "-sharedDb"))
+  server.start()
+
+  sequential
+
   "DynamoDbDataStoreFactory" should {
 
     "connect to local DynamoDB instance" in {
-
-      // DynamoDB Local needs native sqlite4java libs; maven-dependency-plugin should put them here
-      System.setProperty("sqlite4java.library.path", "target/test-classes/native-libs")
-
-      // Create local DynamoDB for this test
-      val server = ServerRunner.createServerFromCommandLineArgs(Array("-inMemory", "-port", DYNAMODB_PORT))
-      server.start()
 
       val params = Map(
         EndpointParam.key -> s"http://localhost:$DYNAMODB_PORT",
@@ -49,9 +51,6 @@ class DynamoDbDataStoreFactoryTest extends Specification {
         ds must beAnInstanceOf[DynamoDbDataStore]
       }
       finally {
-
-        // Stop local DynamoDB
-        server.stop()
 
         // Cleanly dispose datastore
         if (ds != null) {
@@ -90,7 +89,9 @@ class DynamoDbDataStoreFactoryTest extends Specification {
       DynamoDbDataStoreFactory.canProcess(params) must beFalse
     }
 
-
+    step {
+      server.stop()
+    }
   }
 }
 

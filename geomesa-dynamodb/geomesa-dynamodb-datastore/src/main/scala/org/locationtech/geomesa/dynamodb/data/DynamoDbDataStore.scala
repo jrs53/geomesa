@@ -12,7 +12,7 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDB
 import org.locationtech.geomesa.index.api.IndexAdapter
 import org.locationtech.geomesa.index.geotools.GeoMesaDataStore
 import org.locationtech.geomesa.index.geotools.GeoMesaDataStoreFactory.GeoMesaDataStoreConfig
-import org.locationtech.geomesa.index.metadata.GeoMesaMetadata
+import org.locationtech.geomesa.index.metadata.{GeoMesaMetadata, MetadataStringSerializer}
 import org.locationtech.geomesa.index.stats.{GeoMesaStats, RunnableStats}
 import org.locationtech.geomesa.index.utils.LocalLocking
 
@@ -20,8 +20,9 @@ class DynamoDbDataStore(val client: AmazonDynamoDB, config: GeoMesaDataStoreConf
 
   override def adapter: IndexAdapter[DynamoDbDataStore] = null
 
-  override def metadata: GeoMesaMetadata[String] = null //new DynamoDbBackedMetadata(session, config.catalog, MetadataStringSerializer)
+  override def metadata: GeoMesaMetadata[String] = new DynamoDbBackedMetadata(client, config.catalog, MetadataStringSerializer)
 
+  // TODO: support stats properly, c.f. RedisGeoMesaStats
   override def stats: GeoMesaStats = new RunnableStats(this)
 }
 
